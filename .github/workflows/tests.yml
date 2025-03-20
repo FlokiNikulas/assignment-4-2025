@@ -1,0 +1,100 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  unit-tests:
+    name: Execute Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Repository
+        uses: actions/checkout@v4
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Unit Tests
+        run: npm run test
+
+  e2e-tests:
+    name: Execute End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Fetch Repository
+        uses: actions/checkout@v4
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Set Up Database
+        run: |
+          echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env
+          cat .env
+          export $(cat .env | xargs)  # Load env variables
+          npx prisma migrate deploy
+
+      - name: Reset Database Before Tests
+        run: |
+          echo "Resetting Database..."
+          npx prisma migrate reset --force
+
+      - name: Compile Next.js App
+        run: npm run build
+
+      - name: Start Next.js Server
+        run: |
+          nohup npm run start -- -p 3000 > nextjs.log 2>&1 &
+          sleep 5
+        env:
+          NODE_ENV: production
+          PORT: 3000
+
+      - name: Print Next.js Logs if Server Fails
+        if: failure()
+        run: cat nextjs.log
+
+      - name: Wait for Next.js Server to Start
+        run: |
+          echo "Waiting for Next.js to start..."
+          for i in {1..60}; do
+            STATUS_CODE=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:3000 || echo "000")
+            if [[ "$STATUS_CODE" == "200" ]]; then
+              echo "Next.js is up!"
+              break
+            fi
+            echo "Still waiting... ($i)"
+            sleep 2
+          done
+        timeout-minutes: 3
+
+      - name: Run Playwright Tests
+        run: E2E_TEST=true npm run test:e2e
+
+      - name: Upload Playwright Test Results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/

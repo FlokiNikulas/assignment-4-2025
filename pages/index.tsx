@@ -25,17 +25,18 @@ export default function Home() {
       body: JSON.stringify({ text: newTodo }),
     });
     setNewTodo("");
-    fetchTodos();
+    await fetchTodos();
   };
 
   const toggleTodo = async (id: string) => {
     await fetch(`/api/todos?id=${id}`, { method: "PUT" });
-    fetchTodos();
+    await fetchTodos();
   };
 
   const deleteTodo = async (id: string) => {
     await fetch(`/api/todos?id=${id}`, { method: "DELETE" });
-    fetchTodos();
+    await fetchTodos();
+    await new Promise((resolve) => setTimeout(resolve, 300));
   };
 
   return (
@@ -71,14 +72,14 @@ export default function Home() {
                 className="w-5 h-5"
               />
               <span
-                className={`flex-1 ${
-                  todo.completed ? "line-through text-gray-500" : ""
-                }`}
+                data-testid="todo-text"
+                className={`flex-1 ${todo.completed ? "line-through text-gray-500" : ""}`}
               >
                 {todo.text}
               </span>
-              <button
-                onClick={() => deleteTodo(todo.id)}
+              <button 
+                data-testid="delete-btn"
+                onClick={() => deleteTodo(todo.id)} 
                 className="text-red-500 hover:text-red-600"
               >
                 Delete 🗑️

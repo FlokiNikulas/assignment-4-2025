@@ -54,3 +54,8 @@ Add me (arnif) as collaborator to the repository. Also make sure to send the lin
 Your solution should have implemented the tests cases described above. If you want to add any feel free to do so. The GitHub action workflow should be running these tests in a separate job (please note only running tests is required, linting, prettier etc were taken care of in previous assignments, but you are welcome to add them to this project as well 😊).
 
 Good luck and Have fun :)
+
+## To Run Tests
+
+E2E_TEST=true npm run test:e2e
+npm run test
