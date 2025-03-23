@@ -1,94 +1,90 @@
 import { test, expect } from "@playwright/test";
 
-function generateRandomTodo(browser: string, testLabel: string) {
-  return `TODO for ${browser} ${testLabel} ${Math.random().toString(36).substring(2, 10)}`;
+function createUniqueTodo(browserName, label) {
+  return `TODO for ${browserName} ${label} ${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function countTodos(page, _browser, testLabel) {
+async function getTodoCount(page, _browserName, label) {
   await page.waitForTimeout(500);
-  return await page.locator("ul > li span[data-testid='todo-text']")
-    .filter({ hasText: testLabel })
-    .count();
+  const items = page.locator("ul > li span[data-testid='todo-text']").filter({ hasText: label });
+  return await items.count();
 }
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
 
   await page.evaluate(async () => {
-    const response = await fetch(`/api/todos`);
-    const todos = await response.json();
+    const res = await fetch("/api/todos");
+    const todos = await res.json();
     await Promise.all(
-      todos.map((todo: any) =>
-        fetch(`/api/todos?id=${todo.id}`, { method: "DELETE" })
-      )
+      todos.map(todo => fetch(`/api/todos?id=${todo.id}`, { method: "DELETE" }))
     );
-    await new Promise((res) => setTimeout(res, 500));
+    await new Promise(resolve => setTimeout(resolve, 500));
   });
 });
 
 test.afterEach(async ({ page }) => {
   await page.evaluate(async () => {
-    const response = await fetch(`/api/todos`);
-    const todos = await response.json();
+    const res = await fetch("/api/todos");
+    const todos = await res.json();
     await Promise.all(
-      todos.map((todo: { id: any }) =>
-        fetch(`/api/todos?id=${todo.id}`, { method: "DELETE" })
-      )
+      todos.map(todo => fetch(`/api/todos?id=${todo.id}`, { method: "DELETE" }))
     );
-    await new Promise((res) => setTimeout(res, 300));
+    await new Promise(resolve => setTimeout(resolve, 300));
   });
 });
 
-test("should initialize with an empty TODO list", async ({ page, browserName }, testInfo) => {
-  await expect(await countTodos(page, browserName, testInfo.title)).toBe(0);
+test("initial state should have no TODOs", async ({ page, browserName }, testInfo) => {
+  const total = await getTodoCount(page, browserName, testInfo.title);
+  expect(total).toBe(0);
 });
 
-test("should allow adding a new TODO entry", async ({ page, browserName }, testInfo) => {
-  const uniqueTodo = generateRandomTodo(browserName, testInfo.title);
-  await page.fill("input[type='text']", uniqueTodo);
+test("can add a new TODO entry", async ({ page, browserName }, testInfo) => {
+  const todoText = createUniqueTodo(browserName, testInfo.title);
+  await page.fill("input[type='text']", todoText);
   await page.locator("button:text('Add ✨')").click({ force: true });
 
-  await expect(page.locator(`ul > li span`).filter({ hasText: uniqueTodo })).toHaveCount(1);
-  await expect(await countTodos(page, browserName, testInfo.title)).toBe(1);
+  await expect(page.locator("ul > li span").filter({ hasText: todoText })).toHaveCount(1);
+  expect(await getTodoCount(page, browserName, testInfo.title)).toBe(1);
 });
 
-test("should support adding multiple TODO items", async ({ page, browserName }, testInfo) => {
-  const firstTask = generateRandomTodo(browserName, testInfo.title);
-  const secondTask = generateRandomTodo(browserName, testInfo.title);
-  await page.fill("input[type='text']", firstTask);
-  await page.locator("button:text('Add ✨')").click({ force: true });
-  await page.fill("input[type='text']", secondTask);
-  await page.locator("button:text('Add ✨')").click({ force: true });
+test("can add multiple TODOs", async ({ page, browserName }, testInfo) => {
+  const task1 = createUniqueTodo(browserName, testInfo.title);
+  const task2 = createUniqueTodo(browserName, testInfo.title);
 
-  await expect(page.locator(`ul > li span`).filter({ hasText: firstTask })).toHaveCount(1);
-  await expect(page.locator(`ul > li span`).filter({ hasText: secondTask })).toHaveCount(1);
-  await expect(await countTodos(page, browserName, testInfo.title)).toBe(2);
+  for (const task of [task1, task2]) {
+    await page.fill("input[type='text']", task);
+    await page.locator("button:text('Add ✨')").click({ force: true });
+  }
+
+  await expect(page.locator("ul > li span").filter({ hasText: task1 })).toHaveCount(1);
+  await expect(page.locator("ul > li span").filter({ hasText: task2 })).toHaveCount(1);
+  expect(await getTodoCount(page, browserName, testInfo.title)).toBe(2);
 });
 
-test("should enable removing a TODO item", async ({ page, browserName }, testInfo) => {
-  const taskOne = generateRandomTodo(browserName, testInfo.title);
-  const taskTwo = generateRandomTodo(browserName, testInfo.title);
-  await page.fill("input[type='text']", taskOne);
-  await page.locator("button:text('Add ✨')").click({ force: true });
-  await page.fill("input[type='text']", taskTwo);
-  await page.locator("button:text('Add ✨')").click({ force: true });
+test("can remove a TODO item", async ({ page, browserName }, testInfo) => {
+  const first = createUniqueTodo(browserName, testInfo.title);
+  const second = createUniqueTodo(browserName, testInfo.title);
 
-  // Verify both tasks are added
-  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: taskOne })).toHaveCount(1);
-  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: taskTwo })).toHaveCount(1);
+  for (const task of [first, second]) {
+    await page.fill("input[type='text']", task);
+    await page.locator("button:text('Add ✨')").click({ force: true });
+  }
 
-  // Select the correct todo item
-  const todoItem = await page.locator("ul > li").filter({
-    has: page.locator("span[data-testid='todo-text']", { hasText: taskOne })
-  }).nth(0);
+  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: first })).toHaveCount(1);
+  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: second })).toHaveCount(1);
 
-  await todoItem.locator("button[data-testid='delete-btn']").click({ force: true });
-  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: taskOne })).toHaveCount(0);
-  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: taskTwo })).toHaveCount(1);
-  await expect(await countTodos(page, browserName, testInfo.title)).toBe(1);
+  const itemToDelete = page.locator("ul > li").filter({
+    has: page.locator("span[data-testid='todo-text']", { hasText: first }),
+  }).first();
+
+  await itemToDelete.locator("button[data-testid='delete-btn']").click({ force: true });
+
+  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: first })).toHaveCount(0);
+  await expect(page.locator("span[data-testid='todo-text']").filter({ hasText: second })).toHaveCount(1);
+  expect(await getTodoCount(page, browserName, testInfo.title)).toBe(1);
 });
 
-
-test("should confirm correct title on the index page", async ({ page }) => {
+test("should display correct page title", async ({ page }) => {
   await expect(page.title()).resolves.toMatch("TODO 📃");
 });
